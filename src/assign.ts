@@ -31,9 +31,9 @@ export function assign(target: unknown, ...sources: any[]) {
 
     for (const source of sources) {
         if (!isNull(source)) {
-            for (const key of Object.keys(source)) {
+            Object.keys(source).forEach(key => {
                 to[key] = source[key]
-            }
+            })
         }
     }
     return to
