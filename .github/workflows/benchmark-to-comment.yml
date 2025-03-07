@@ -20,117 +20,29 @@ jobs:
     benchmark:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+            -   uses: actions/checkout@v4
+                with:
+                    ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
 
-            - name: Fetch base branch
-              run: git fetch origin $GITHUB_BASE_REF
+            -   name: Fetch base branch
+                run: git fetch origin $GITHUB_BASE_REF
 
-            - uses: pnpm/action-setup@v4
+            -   uses: pnpm/action-setup@v4
 
-            - name: Use Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: '20'
-                  cache: 'pnpm'
+            -   name: Use Node.js
+                uses: actions/setup-node@v4
+                with:
+                    node-version: '20'
+                    cache: 'pnpm'
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+            -   name: Install dependencies
+                run: pnpm install --frozen-lockfile
 
-            - name: Identify modified utility files
-              id: modified_files
-              run: |
-                  MODIFIED=$(git diff --name-only origin/$GITHUB_BASE_REF -- 'src/*.ts' ':!src/internal/*.ts' ':!src/*.test.ts')
-                  SRC_BENCH_FILES=$(echo "$MODIFIED" | tr '\n' ' ')
-
-                  echo "SRC_BENCH_FILES=$SRC_BENCH_FILES" >> $GITHUB_ENV
-
-            - name: Find modified internal files and affected utilities
-              id: modified_internal_files
-              run: |
-                  INTERNAL_MODIFIED=$(node ./scripts/find-importing-files.mjs $GITHUB_BASE_REF)
-                  INTERNAL_BENCH_FILES=$(echo "$INTERNAL_MODIFIED" | tr '\n' ' ')
-
-                  echo "INTERNAL_BENCH_FILES=$INTERNAL_BENCH_FILES" >> $GITHUB_ENV
-
-            - name: Merge all modified bench files
-              id: merge_bench_files
-              run: |
-                  ALL_FILES=$(echo -e "$SRC_BENCH_FILES\n$INTERNAL_BENCH_FILES")
-
-                  BENCH_FILES=$(echo "$ALL_FILES" | tr ' ' '\n' | while read file; do
-                    # .bench.ts 변경은 그대로 사용
-                    if [[ "$file" == *.bench.ts ]]; then
-                      # 파일이 존재하는지 확인
-                      if [ -f "$file" ]; then
-                        echo "$file"
-                      fi
-                    # .ts -> .bench.ts로 변경
-                    else
-                      BENCH_FILE="${file%.ts}.bench.ts"
-                      # 파일이 존재하는지 확인
-                      if [ -f "$BENCH_FILE" ]; then
-                        echo "$BENCH_FILE"
-                      fi
-                    fi
-                  done | sort | uniq | tr '\n' ' ')
-
-                  echo "BENCH_FILES=$BENCH_FILES" >> $GITHUB_ENV
-
-            - name: Run benchmarks
-              if: env.BENCH_FILES != ''
-              run: pnpm vitest bench $BENCH_FILES
-              env:
-                  BENCH_FILES: ${{ env.BENCH_FILES }}
-
-            - name: Convert benchmark results to markdown
-              if: env.BENCH_FILES != ''
-              run: |
-                  node ./scripts/benchmark-to-md.mjs benchmark-result.json ${{ github.sha }} > benchmark-results.md
-
-            - name: Create PR comment
-              if: env.BENCH_FILES != ''
-              uses: actions/github-script@v6
-              with:
-                  script: |
-                      const fs = await import('node:fs/promises');
-
-                      const content = await fs.readFile('benchmark-results.md', 'utf8');
-                      const finalContent = content +
-                        '\n\n*Last updated by [GitHub Actions](https://github.com/' +
-                        process.env.GITHUB_REPOSITORY + '/actions/runs/' +
-                        process.env.GITHUB_RUN_ID + ')*';
-
-                      let prNumber;
-                      if (context.eventName === 'pull_request_target') {
-                        prNumber = context.payload.pull_request.number;
-                      } else if (context.payload.inputs?.pr_number) {
-                        prNumber = parseInt(context.payload.inputs.pr_number, 10);
-                      } else {
-                        console.log('No PR number provided for workflow_dispatch event');
-                        return;
-                      }
-
-                      const { data: comments } = await github.rest.issues.listComments({
-                        ...context.repo,
-                        issue_number: prNumber,
-                      });
-
-                      const existingComment = comments.find(comment =>
-                        comment.body.includes('### Benchmark Results')
-                      );
-
-                      if (existingComment) {
-                        await github.rest.issues.updateComment({
-                          ...context.repo,
-                          comment_id: existingComment.id,
-                          body: finalContent,
-                        });
-                      } else {
-                        await github.rest.issues.createComment({
-                          ...context.repo,
-                          issue_number: prNumber,
-                          body: finalContent,
-                        });
-                      }
+            -   name: Run benchmarks
+                uses: NaverPayDev/benchmark-actions@main
+                with:
+                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    PACKAGE_MANAGER: 'pnpm'
+                    TARGET: 'comment'
+                    SOURCE_ROOT: 'src'
+                    PR_NUMBER: ${{ github.event.inputs.pr_number }}
