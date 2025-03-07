@@ -32,7 +32,7 @@ jobs:
                 run: pnpm install --frozen-lockfile
 
             -   name: Run benchmark
-                uses: AndrewSRP/benchmark-actions-fork@main
+                uses: NaverPayDev/benchmark-actions@main
                 with:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     PACKAGE_MANAGER: 'pnpm'
